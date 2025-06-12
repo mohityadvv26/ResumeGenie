@@ -1,10 +1,15 @@
-import sqlite3
+import pymysql
 from datetime import datetime
 
 def get_database_connection():
-    """Create and return a database connection"""
-    conn = sqlite3.connect('resume_data.db')
-    return conn
+    return pymysql.connect(
+            host='localhost',
+            user='root',
+            password='Mohit@2004',
+            database='resume_db',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+
 
 def init_database():
     """Initialize database tables"""
@@ -14,10 +19,10 @@ def init_database():
     # Create resume_data table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS resume_data (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        phone TEXT NOT NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
         linkedin TEXT,
         github TEXT,
         portfolio TEXT,
@@ -31,15 +36,15 @@ def init_database():
         template TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-    ''')
-    
+''')
+
     # Create resume_skills table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS resume_skills (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         resume_id INTEGER,
-        skill_name TEXT NOT NULL,
-        skill_category TEXT NOT NULL,
+        skill_name VARCHAR(255) NOT NULL,
+        skill_category VARCHAR(255) NOT NULL,
         proficiency_score REAL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (resume_id) REFERENCES resume_data (id)
@@ -49,7 +54,7 @@ def init_database():
     # Create resume_analysis table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS resume_analysis (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         resume_id INTEGER,
         ats_score REAL,
         keyword_match_score REAL,
@@ -65,9 +70,9 @@ def init_database():
     # Create admin_logs table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS admin_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        admin_email TEXT NOT NULL,
-        action TEXT NOT NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        admin_email VARCHAR(255) NOT NULL,
+        action VARCHAR(255) NOT NULL,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -75,9 +80,9 @@ def init_database():
     # Create admin table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS admin (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -98,7 +103,7 @@ def save_resume_data(data):
             name, email, phone, linkedin, github, portfolio,
             summary, target_role, target_category, education, 
             experience, projects, skills, template
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             personal_info.get('full_name', ''),
             personal_info.get('email', ''),
@@ -136,7 +141,7 @@ def save_analysis_data(resume_id, analysis):
             resume_id, ats_score, keyword_match_score,
             format_score, section_score, missing_skills,
             recommendations
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (
             resume_id,
             float(analysis.get('ats_score', 0)),
@@ -196,7 +201,7 @@ def log_admin_action(admin_email, action):
     try:
         cursor.execute('''
         INSERT INTO admin_logs (admin_email, action)
-        VALUES (?, ?)
+        VALUES (%s, %s)
         ''', (admin_email, action))
         conn.commit()
     except Exception as e:
@@ -262,7 +267,7 @@ def verify_admin(email, password):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT * FROM admin WHERE email = ? AND password = ?', (email, password))
+        cursor.execute('SELECT * FROM admin WHERE email = %s AND password = %s', (email, password))
         result = cursor.fetchone()
         return bool(result)
     except Exception as e:
@@ -277,7 +282,7 @@ def add_admin(email, password):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('INSERT INTO admin (email, password) VALUES (?, ?)', (email, password))
+        cursor.execute('INSERT INTO admin (email, password) VALUES (%s, %s)', (email, password))
         conn.commit()
         return True
     except Exception as e:

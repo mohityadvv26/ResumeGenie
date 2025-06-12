@@ -1,10 +1,10 @@
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
 from docx.enum.section import WD_SECTION
 from docx.enum.style import WD_STYLE_TYPE
-from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
 from io import BytesIO
 import tempfile
 import traceback
@@ -15,7 +15,23 @@ class ResumeBuilder:
             "Modern": self.build_modern_template,
             "Professional": self.build_professional_template,
             "Minimal": self.build_minimal_template,
-            "Creative": self.build_creative_template
+            "Creative": self.build_creative_template,
+            "Elegant": self.build_elegant_template,
+            "Compact": self.build_compact_template,
+            "Two-Column": self.build_two_column_template,
+            # "Dark Theme": self.build_dark_theme_template,
+            "Classic": self.build_classic_template,
+            # "Bold": self.build_bold_template,
+            # "Timeline": self.build_timeline_template,
+            # "Techie": self.build_techie_template,
+            # "Academic": self.build_academic_template,
+            # "Startup": self.build_startup_template,
+            # "Corporate": self.build_corporate_template,
+            # "Freelancer": self.build_freelancer_template,
+            # "Infographic": self.build_infographic_template,
+            # "Designer": self.build_designer_template,
+            # "Functional": self.build_functional_template,
+            # "Hybrid": self.build_hybrid_template
         }
         
     def generate_resume(self, data):
@@ -38,6 +54,38 @@ class ResumeBuilder:
                 doc = self.build_minimal_template(doc, data)
             elif template_name == 'creative':
                 doc = self.build_creative_template(doc, data)
+            elif template_name == 'elegant':
+                doc = self.build_elegant_template(doc, data)
+            elif template_name == 'compact':
+                doc = self.build_compact_template(doc, data)
+            elif template_name == 'two-column':
+                doc = self.build_two_column_template(doc, data)
+            # elif template_name == 'dark theme':
+            #     doc = self.build_dark_theme_template(doc, data)
+            elif template_name == 'classic':
+                doc = self.build_classic_template(doc, data)
+            # elif template_name == 'bold':
+            #     doc = self.build_bold_template(doc, data)
+            # elif template_name == 'timeline':
+            #     doc = self.build_timeline_template(doc, data)
+            # elif template_name == 'techie':
+            #     doc = self.build_techie_template(doc, data)
+            # elif template_name == 'academic':
+            #     doc = self.build_academic_template(doc, data)
+            # elif template_name == 'startup':
+            #     doc = self.build_startup_template(doc, data)
+            # elif template_name == 'corporate':
+            #     doc = self.build_corporate_template(doc, data)
+            # elif template_name == 'freelancer':
+            #     doc = self.build_freelancer_template(doc, data)
+            # elif template_name == 'infographic':
+            #     doc = self.build_infographic_template(doc, data)
+            # elif template_name == 'designer':
+            #     doc = self.build_designer_template(doc, data)
+            # elif template_name == 'functional':
+            #     doc = self.build_functional_template(doc, data)
+            # elif template_name == 'hybrid':
+            #     doc = self.build_hybrid_template(doc, data)
             else:
                 print(f"Warning: Unknown template '{template_name}', falling back to modern template")
                 doc = self.build_modern_template(doc, data)
@@ -775,6 +823,512 @@ class ResumeBuilder:
             print(f"Error in build_creative_template: {str(e)}")
             raise
 
+    def build_elegant_template(self, doc, data):
+        try:
+            # Styles
+            name_font_size = Pt(24)
+            header_font_size = Pt(12)
+            section_font_size = Pt(14)
+            normal_font_size = Pt(11)
+
+            # Name Header
+            name = doc.add_paragraph()
+            run = name.add_run(data.get('name', 'Your Name'))
+            run.bold = True
+            run.font.size = name_font_size
+            name.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+            # Contact Info
+            contact_info = []
+            if data.get('email'):
+                contact_info.append(data['email'])
+            if data.get('phone'):
+                contact_info.append(data['phone'])
+            if data.get('linkedin'):
+                contact_info.append(data['linkedin'])
+            if data.get('github'):
+                contact_info.append(data['github'])
+
+            contact = doc.add_paragraph(' | '.join(contact_info))
+            contact.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            contact.style.font.size = normal_font_size
+
+            # Horizontal Line
+            doc.add_paragraph('―' * 60).alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+            # Helper function to add section titles
+            def add_section_title(title):
+                p = doc.add_paragraph(title)
+                run = p.runs[0]
+                run.bold = True
+                run.font.size = section_font_size
+                run.font.color.rgb = RGBColor(0x42, 0x24, 0xE9)  # Elegant blue-purple tone
+                p.paragraph_format.space_after = Pt(4)
+
+            # Summary
+            if data.get('summary'):
+                add_section_title("Summary")
+                p = doc.add_paragraph(data['summary'])
+                p.paragraph_format.left_indent = Inches(0.2)
+                p.style.font.size = normal_font_size
+
+            # Experience
+            if data.get('experience'):
+                add_section_title("Experience")
+                for exp in data['experience']:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{exp['position']} at {exp['company']}").bold = True
+                    p.add_run(f"\n{exp['start_date']} - {exp['end_date']}")
+                    p.paragraph_format.left_indent = Inches(0.2)
+                    p.paragraph_format.space_after = Pt(4)
+
+                    if exp.get('description'):
+                        desc = doc.add_paragraph(exp['description'])
+                        desc.paragraph_format.left_indent = Inches(0.4)
+
+                    if exp.get('responsibilities'):
+                        for resp in exp['responsibilities']:
+                            bullet = doc.add_paragraph('• ' + resp)
+                            bullet.paragraph_format.left_indent = Inches(0.5)
+
+            # Projects
+            if data.get('projects'):
+                add_section_title("Projects")
+                for proj in data['projects']:
+                    p = doc.add_paragraph()
+                    p.add_run(proj['name']).bold = True
+                    if proj.get('technologies'):
+                        p.add_run(f" | {proj['technologies']}")
+                    p.paragraph_format.left_indent = Inches(0.2)
+
+                    if proj.get('description'):
+                        desc = doc.add_paragraph(proj['description'])
+                        desc.paragraph_format.left_indent = Inches(0.4)
+
+                    if proj.get('responsibilities'):
+                        for resp in proj['responsibilities']:
+                            bullet = doc.add_paragraph('• ' + resp)
+                            bullet.paragraph_format.left_indent = Inches(0.5)
+
+            # Education
+            if data.get('education'):
+                add_section_title("Education")
+                for edu in data['education']:
+                    p = doc.add_paragraph()
+                    p.add_run(edu['school']).bold = True
+                    p.add_run(f"\n{edu['degree']} in {edu['field']}")
+                    p.add_run(f"\nGraduation: {edu['graduation_date']}")
+                    if edu.get('gpa'):
+                        p.add_run(f" | GPA: {edu['gpa']}")
+                    p.paragraph_format.left_indent = Inches(0.2)
+
+            # Skills
+            if data.get('skills'):
+                add_section_title("Skills")
+                skills = data['skills']
+
+                def add_skill_block(title, skill_list):
+                    if skill_list:
+                        p = doc.add_paragraph()
+                        p.add_run(f"{title}: ").bold = True
+                        p.add_run(' • '.join(skill_list))
+                        p.paragraph_format.left_indent = Inches(0.2)
+
+                add_skill_block("Technical Skills", skills.get('technical', []))
+                add_skill_block("Soft Skills", skills.get('soft', []))
+                add_skill_block("Languages", skills.get('languages', []))
+                add_skill_block("Tools & Technologies", skills.get('tools', []))
+
+            # Page Margins
+            for section in doc.sections:
+                section.top_margin = Inches(0.6)
+                section.bottom_margin = Inches(0.6)
+                section.left_margin = Inches(0.7)
+                section.right_margin = Inches(0.7)
+
+            return doc
+
+        except Exception as e:
+            print(f"Error in build_elegant_template: {str(e)}")
+            raise
+
+    def build_compact_template(self, doc, data):
+        try:
+            # Styles
+            name_font_size = Pt(20)
+            header_font_size = Pt(11)
+            section_font_size = Pt(12)
+            normal_font_size = Pt(10)
+
+            # Name
+            name = doc.add_paragraph()
+            run = name.add_run(data.get('name', 'Your Name'))
+            run.bold = True
+            run.font.size = name_font_size
+            name.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+
+            # Contact Details
+            contact_info = []
+            if data.get('email'):
+                contact_info.append(data['email'])
+            if data.get('phone'):
+                contact_info.append(data['phone'])
+            if data.get('linkedin'):
+                contact_info.append(data['linkedin'])
+            if data.get('github'):
+                contact_info.append(data['github'])
+
+            contact = doc.add_paragraph(' | '.join(contact_info))
+            contact.style.font.size = normal_font_size
+
+            # Horizontal Rule
+            doc.add_paragraph('―' * 50)
+
+            # Section Title Helper
+            def add_section_title(title):
+                p = doc.add_paragraph(title)
+                run = p.runs[0]
+                run.bold = True
+                run.font.size = section_font_size
+                run.font.color.rgb = RGBColor(0, 0, 0)
+                p.paragraph_format.space_after = Pt(2)
+
+            # Summary
+            if data.get('summary'):
+                add_section_title("Summary")
+                p = doc.add_paragraph(data['summary'])
+                p.style.font.size = normal_font_size
+                p.paragraph_format.space_after = Pt(4)
+
+            # Experience
+            if data.get('experience'):
+                add_section_title("Experience")
+                for exp in data['experience']:
+                    para = doc.add_paragraph()
+                    para.add_run(f"{exp['position']} at {exp['company']}").bold = True
+                    para.add_run(f", {exp['start_date']} - {exp['end_date']}")
+                    para.style.font.size = normal_font_size
+
+                    if exp.get('description'):
+                        desc = doc.add_paragraph(exp['description'])
+                        desc.paragraph_format.left_indent = Inches(0.2)
+
+                    if exp.get('responsibilities'):
+                        for resp in exp['responsibilities']:
+                            bullet = doc.add_paragraph(f"• {resp}")
+                            bullet.paragraph_format.left_indent = Inches(0.25)
+                            bullet.style.font.size = normal_font_size
+
+            # Projects
+            if data.get('projects'):
+                add_section_title("Projects")
+                for proj in data['projects']:
+                    p = doc.add_paragraph()
+                    p.add_run(proj['name']).bold = True
+                    if proj.get('technologies'):
+                        p.add_run(f" | {proj['technologies']}")
+                    p.style.font.size = normal_font_size
+
+                    if proj.get('description'):
+                        desc = doc.add_paragraph(proj['description'])
+                        desc.paragraph_format.left_indent = Inches(0.2)
+
+                    if proj.get('responsibilities'):
+                        for resp in proj['responsibilities']:
+                            bullet = doc.add_paragraph('• ' + resp)
+                            bullet.paragraph_format.left_indent = Inches(0.25)
+
+            # Education
+            if data.get('education'):
+                add_section_title("Education")
+                for edu in data['education']:
+                    p = doc.add_paragraph()
+                    p.add_run(edu['school']).bold = True
+                    p.add_run(f" - {edu['degree']} in {edu['field']}")
+                    p.add_run(f", {edu['graduation_date']}")
+                    if edu.get('gpa'):
+                        p.add_run(f" | GPA: {edu['gpa']}")
+                    p.style.font.size = normal_font_size
+                    p.paragraph_format.space_after = Pt(2)
+
+            # Skills
+            if data.get('skills'):
+                add_section_title("Skills")
+                skills = data['skills']
+
+                def add_skill_line(title, skill_list):
+                    if skill_list:
+                        p = doc.add_paragraph()
+                        p.add_run(f"{title}: ").bold = True
+                        p.add_run(', '.join(skill_list))
+                        p.style.font.size = normal_font_size
+                        p.paragraph_format.space_after = Pt(2)
+
+                add_skill_line("Technical", skills.get('technical', []))
+                add_skill_line("Soft", skills.get('soft', []))
+                add_skill_line("Languages", skills.get('languages', []))
+                add_skill_line("Tools", skills.get('tools', []))
+
+            # Compact Margins
+            for section in doc.sections:
+                section.top_margin = Inches(0.4)
+                section.bottom_margin = Inches(0.4)
+                section.left_margin = Inches(0.5)
+                section.right_margin = Inches(0.5)
+
+            return doc
+
+        except Exception as e:
+            print(f"Error in build_compact_template: {str(e)}")
+            raise
+
+    def build_two_column_template(self, doc, data):
+        try:
+            # Set narrow margins
+            for section in doc.sections:
+                section.top_margin = Inches(0.4)
+                section.bottom_margin = Inches(0.4)
+                section.left_margin = Inches(0.4)
+                section.right_margin = Inches(0.4)
+
+            # Title
+            name = doc.add_paragraph()
+            run = name.add_run(data.get('name', 'Your Name'))
+            run.bold = True
+            run.font.size = Pt(22)
+            name.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+            # Contact Info centered
+            contact_info = []
+            if data.get('email'):
+                contact_info.append(data['email'])
+            if data.get('phone'):
+                contact_info.append(data['phone'])
+            if data.get('linkedin'):
+                contact_info.append(data['linkedin'])
+            if data.get('github'):
+                contact_info.append(data['github'])
+
+            contact = doc.add_paragraph(' | '.join(contact_info))
+            contact.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            contact.style.font.size = Pt(10)
+
+            # Add horizontal line
+            doc.add_paragraph('―' * 80)
+
+            # Create a table to simulate two columns
+            table = doc.add_table(rows=1, cols=2)
+            table.autofit = False
+            widths = [Inches(2.3), Inches(4.7)]
+            for idx, width in enumerate(widths):
+                table.columns[idx].width = width
+
+            left_cell = table.rows[0].cells[0]
+            right_cell = table.rows[0].cells[1]
+
+            def add_section(cell, title, content, font_size=10):
+                if content:
+                    para = cell.add_paragraph()
+                    run = para.add_run(title)
+                    run.bold = True
+                    run.font.size = Pt(11)
+                    para.paragraph_format.space_after = Pt(1)
+
+                    if isinstance(content, str):
+                        text_para = cell.add_paragraph(content)
+                        text_para.style.font.size = Pt(font_size)
+                    elif isinstance(content, list):
+                        for item in content:
+                            bullet = cell.add_paragraph('• ' + item)
+                            bullet.paragraph_format.left_indent = Inches(0.1)
+                            bullet.style.font.size = Pt(font_size)
+
+            # Left Column
+            add_section(left_cell, 'EDUCATION', None)
+            for edu in data.get('education', []):
+                para = left_cell.add_paragraph()
+                para.add_run(edu['school']).bold = True
+                para.add_run(f"\n{edu['degree']} in {edu['field']}")
+                para.add_run(f"\n{edu['graduation_date']}")
+                if edu.get('gpa'):
+                    para.add_run(f"\nGPA: {edu['gpa']}")
+                para.style.font.size = Pt(10)
+                para.paragraph_format.space_after = Pt(5)
+
+            add_section(left_cell, 'SKILLS', None)
+            skills = data.get('skills', {})
+            for category in ['technical', 'tools', 'soft', 'languages']:
+                if skills.get(category):
+                    sub = left_cell.add_paragraph()
+                    sub.add_run(category.capitalize() + ": ").bold = True
+                    sub.add_run(', '.join(skills[category]))
+                    sub.style.font.size = Pt(10)
+                    sub.paragraph_format.space_after = Pt(2)
+
+            # Right Column
+            if data.get('summary'):
+                add_section(right_cell, "SUMMARY", data['summary'])
+
+            if data.get('experience'):
+                add_section(right_cell, "EXPERIENCE", None)
+                for exp in data['experience']:
+                    p = right_cell.add_paragraph()
+                    p.add_run(f"{exp['position']} at {exp['company']}").bold = True
+                    p.add_run(f", {exp['start_date']} - {exp['end_date']}")
+                    p.style.font.size = Pt(10)
+                    if exp.get('description'):
+                        desc = right_cell.add_paragraph(exp['description'])
+                        desc.paragraph_format.left_indent = Inches(0.1)
+                    if exp.get('responsibilities'):
+                        for task in exp['responsibilities']:
+                            bullet = right_cell.add_paragraph('• ' + task)
+                            bullet.paragraph_format.left_indent = Inches(0.2)
+                            bullet.style.font.size = Pt(10)
+
+            if data.get('projects'):
+                add_section(right_cell, "PROJECTS", None)
+                for proj in data['projects']:
+                    p = right_cell.add_paragraph()
+                    p.add_run(proj['name']).bold = True
+                    if proj.get('technologies'):
+                        p.add_run(f" | {proj['technologies']}")
+                    p.style.font.size = Pt(10)
+
+                    if proj.get('description'):
+                        desc = right_cell.add_paragraph(proj['description'])
+                        desc.paragraph_format.left_indent = Inches(0.1)
+
+                    if proj.get('responsibilities'):
+                        for point in proj['responsibilities']:
+                            bullet = right_cell.add_paragraph('• ' + point)
+                            bullet.paragraph_format.left_indent = Inches(0.2)
+
+            return doc
+
+        except Exception as e:
+            print(f"Error in build_two_column_template: {str(e)}")
+            raise
+
+    def build_classic_template(self, doc, data):
+        try:
+            # Set margins
+            for section in doc.sections:
+                section.top_margin = Inches(0.7)
+                section.bottom_margin = Inches(0.7)
+                section.left_margin = Inches(0.7)
+                section.right_margin = Inches(0.7)
+
+            # Title: Name and contact information
+            name = doc.add_paragraph()
+            run = name.add_run(data.get('name', 'Your Name'))
+            run.bold = True
+            run.font.size = Pt(22)
+            name.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+            contact_info = []
+            if data.get('email'):
+                contact_info.append(data['email'])
+            if data.get('phone'):
+                contact_info.append(data['phone'])
+            if data.get('linkedin'):
+                contact_info.append(data['linkedin'])
+            if data.get('github'):
+                contact_info.append(data['github'])
+
+            contact = doc.add_paragraph(' | '.join(contact_info))
+            contact.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            contact.style.font.size = Pt(10)
+
+            # Add a line divider
+            doc.add_paragraph('―' * 80)
+
+            # Create sections: Summary, Skills, Education, Experience, Projects
+            def add_section(title, content, is_bold=True, font_size=10, alignment=WD_PARAGRAPH_ALIGNMENT.LEFT):
+                if content:
+                    para = doc.add_paragraph()
+                    run = para.add_run(title)
+                    run.bold = is_bold
+                    run.font.size = Pt(11)
+                    para.paragraph_format.space_after = Pt(2)
+                    para.alignment = alignment
+
+                    if isinstance(content, str):
+                        text_para = doc.add_paragraph(content)
+                        text_para.style.font.size = Pt(font_size)
+                    elif isinstance(content, list):
+                        for item in content:
+                            bullet = doc.add_paragraph('• ' + item)
+                            bullet.paragraph_format.left_indent = Inches(0.2)
+                            bullet.style.font.size = Pt(font_size)
+
+            # Add a Summary section
+            if data.get('summary'):
+                add_section('SUMMARY', data['summary'], is_bold=True, font_size=10)
+
+            # Add a Skills section
+            if data.get('skills'):
+                skills = data.get('skills', {})
+                skills_content = []
+                for category in ['technical', 'tools', 'soft', 'languages']:
+                    if skills.get(category):
+                        skills_content.append(f"{category.capitalize()}: {', '.join(skills[category])}")
+                add_section('SKILLS', '\n'.join(skills_content), is_bold=True, font_size=10)
+
+            # Add Education section
+            if data.get('education'):
+                add_section('EDUCATION', None, is_bold=True, font_size=10)
+                for edu in data.get('education', []):
+                    para = doc.add_paragraph()
+                    para.add_run(f"{edu['school']}, {edu['degree']} in {edu['field']}")
+                    para.add_run(f"\n{edu['graduation_date']}")
+                    if edu.get('gpa'):
+                        para.add_run(f" | GPA: {edu['gpa']}")
+                    para.style.font.size = Pt(10)
+                    para.paragraph_format.space_after = Pt(5)
+
+            # Add Experience section
+            if data.get('experience'):
+                add_section('EXPERIENCE', None, is_bold=True, font_size=10)
+                for exp in data.get('experience', []):
+                    para = doc.add_paragraph()
+                    para.add_run(f"{exp['position']} at {exp['company']}").bold = True
+                    para.add_run(f" | {exp['start_date']} - {exp['end_date']}")
+                    para.style.font.size = Pt(10)
+                    if exp.get('description'):
+                        desc = doc.add_paragraph(exp['description'])
+                        desc.paragraph_format.left_indent = Inches(0.2)
+                    if exp.get('responsibilities'):
+                        for task in exp['responsibilities']:
+                            bullet = doc.add_paragraph('• ' + task)
+                            bullet.paragraph_format.left_indent = Inches(0.3)
+                            bullet.style.font.size = Pt(10)
+
+            # Add Projects section
+            if data.get('projects'):
+                add_section('PROJECTS', None, is_bold=True, font_size=10)
+                for proj in data.get('projects', []):
+                    para = doc.add_paragraph()
+                    para.add_run(proj['name']).bold = True
+                    if proj.get('technologies'):
+                        para.add_run(f" | {proj['technologies']}")
+                    para.style.font.size = Pt(10)
+
+                    if proj.get('description'):
+                        desc = doc.add_paragraph(proj['description'])
+                        desc.paragraph_format.left_indent = Inches(0.2)
+
+                    if proj.get('responsibilities'):
+                        for point in proj['responsibilities']:
+                            bullet = doc.add_paragraph('• ' + point)
+                            bullet.paragraph_format.left_indent = Inches(0.3)
+
+            return doc
+
+        except Exception as e:
+            print(f"Error in build_classic_template: {str(e)}")
+            raise
+
+    
     def generate_preview(self, template_name, data):
         """Generate a live preview of the resume"""
         if template_name not in self.preview_templates:

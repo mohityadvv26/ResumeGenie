@@ -1,11 +1,11 @@
 """
-Smart Resume AI - Main Application
+ResumeGenie - Main Application
 """
 import streamlit as st
 
 # Set page config at the very beginning
 st.set_page_config(
-    page_title="Smart Resume AI",
+    page_title="ResumeGenie",
     page_icon="🚀",
     layout="wide"
 )
@@ -23,6 +23,7 @@ from config.database import (
 from config.job_roles import JOB_ROLES
 from config.courses import COURSES_BY_CATEGORY, RESUME_VIDEOS, INTERVIEW_VIDEOS, get_courses_for_role, get_category_for_role
 from dashboard.dashboard import DashboardManager
+from cover_letter import app as cover_letter_app
 import requests
 from streamlit_lottie import st_lottie
 import plotly.graph_objects as go
@@ -79,9 +80,10 @@ class ResumeApp:
             "🔍 RESUME ANALYZER": self.render_analyzer,
             "📝 RESUME BUILDER": self.render_builder,
             "📊 DASHBOARD": self.render_dashboard,
+            "📄 COVER LETTER": self.render_cover_letter,
             "🎯 JOB SEARCH": self.render_job_search,
             "💬 FEEDBACK": self.render_feedback_page,
-            "ℹ️ ABOUT": self.render_about
+            # "ℹ️ ABOUT": self.render_about
         }
         
         # Initialize dashboard manager
@@ -488,6 +490,10 @@ class ResumeApp:
         """Render the dashboard page"""
         self.dashboard_manager.render_dashboard()
 
+    def render_cover_letter(self):
+        """Render the cover letter feature inside your project"""
+        cover_letter_app.render()
+
     def render_empty_state(self, icon, message):
         """Render an empty state with icon and message"""
         return f"""
@@ -536,7 +542,13 @@ class ResumeApp:
         st.write("Create your professional resume")
         
         # Template selection
-        template_options = ["Modern", "Professional", "Minimal", "Creative"]
+        # template_options = ["Modern", "Professional", "Minimal", "Creative", "Elegant", "Compact", "Two-Column", "Dark Theme"]
+        template_options = [
+        "Modern", "Professional", "Minimal", "Creative", "Elegant", "Compact", 
+        "Two-Column", "Dark Theme", "Classic", "Bold", "Timeline", "Techie", 
+        "Academic", "Startup", "Corporate", "Freelancer", "Infographic", 
+        "Designer", "Functional", "Hybrid"
+        ]
         selected_template = st.selectbox("Select Resume Template", template_options)
         st.success(f"🎨 Currently using: {selected_template} Template")
 
@@ -1006,7 +1018,7 @@ class ResumeApp:
         # Hero Section
         st.markdown("""
             <div class="hero-section">
-                <h1 class="hero-title">About Smart Resume AI</h1>
+                <h1 class="hero-title">About ResumeGenie</h1>
                 <p class="hero-subtitle">A powerful AI-driven platform for optimizing your resume</p>
             </div>
         """, unsafe_allow_html=True)
@@ -1033,7 +1045,7 @@ class ResumeApp:
                 </div>
                 <p class="bio-text">
                     Hello! I'm a passionate Full Stack Developer with expertise in AI and Machine Learning. 
-                    I created Smart Resume AI to revolutionize how job seekers approach their career journey. 
+                    I created ResumeGenie to revolutionize how job seekers approach their career journey. 
                     With my background in both software development and AI, I've designed this platform to 
                     provide intelligent, data-driven insights for resume optimization.
                 </p>
@@ -1046,7 +1058,7 @@ class ResumeApp:
                 <i class="fas fa-lightbulb vision-icon"></i>
                 <h2 class="vision-title">Our Vision</h2>
                 <p class="vision-text">
-                    "Smart Resume AI represents my vision of democratizing career advancement through technology. 
+                    "ResumeGenie represents my vision of democratizing career advancement through technology. 
                     By combining cutting-edge AI with intuitive design, this platform empowers job seekers at 
                     every career stage to showcase their true potential and stand out in today's competitive job market."
                 </p>
@@ -1430,7 +1442,7 @@ class ResumeApp:
         st.markdown("""
             <div class="feedback-header">
                 <h1>📣 Your Voice Matters!</h1>
-                <p>Help us improve Smart Resume AI with your valuable feedback</p>
+                <p>Help us improve ResumeGenie with your valuable feedback</p>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1451,7 +1463,7 @@ class ResumeApp:
         
         # Hero Section
         hero_section(
-            "Smart Resume AI",
+            "ResumeGenie",
             "Transform your career with AI-powered resume analysis and building. Get personalized insights and create professional resumes that stand out."
         )
         
@@ -1493,10 +1505,14 @@ class ResumeApp:
         """Main application entry point"""
         self.apply_global_styles()
         
-        # Admin login/logout in sidebar
+       # Admin is always considered logged in
+        st.session_state.is_admin = True
+        st.session_state.current_admin_email = "admin@example.com"  # optional placeholder
+        
+        # Sidebar layout
         with st.sidebar:
             st_lottie(self.load_lottie_url("https://assets5.lottiefiles.com/packages/lf20_xyadoh9h.json"), height=200, key="sidebar_animation")
-            st.title("Smart Resume AI")
+            st.title("ResumeGenie")
             st.markdown("---")
             
             # Navigation buttons
@@ -1505,58 +1521,29 @@ class ResumeApp:
                     cleaned_name = page_name.lower().replace(" ", "_").replace("🏠", "").replace("🔍", "").replace("📝", "").replace("📊", "").replace("🎯", "").replace("💬", "").replace("ℹ️", "").strip()
                     st.session_state.page = cleaned_name
                     st.rerun()
-
-            # Add some space before admin login
+            
             st.markdown("<br><br>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # Admin Login/Logout section at bottom
-            if st.session_state.get('is_admin', False):
-                st.success(f"Logged in as: {st.session_state.get('current_admin_email')}")
-                if st.button("Logout", key="logout_button"):
-                    try:
-                        log_admin_action(st.session_state.get('current_admin_email'), "logout")
-                        st.session_state.is_admin = False
-                        st.session_state.current_admin_email = None
-                        st.success("Logged out successfully!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error during logout: {str(e)}")
-            else:
-                with st.expander("👤 Admin Login"):
-                    admin_email_input = st.text_input("Email", key="admin_email_input")
-                    admin_password = st.text_input("Password", type="password", key="admin_password_input")
-                    if st.button("Login", key="login_button"):
-                            try:
-                                if verify_admin(admin_email_input, admin_password):
-                                    st.session_state.is_admin = True
-                                    st.session_state.current_admin_email = admin_email_input
-                                    log_admin_action(admin_email_input, "login")
-                                    st.success("Logged in successfully!")
-                                    st.rerun()
-                                else:
-                                    st.error("Invalid credentials")
-                            except Exception as e:
-                                st.error(f"Error during login: {str(e)}")
-        
+            # Always-visible admin info
+            # st.success(f"Logged in as: {st.session_state.current_admin_email}")
+
         # Force home page on first load
         if 'initial_load' not in st.session_state:
             st.session_state.initial_load = True
             st.session_state.page = 'home'
             st.rerun()
         
-        # Get current page and render it
+        # Page routing
         current_page = st.session_state.get('page', 'home')
+        page_mapping = {
+            name.lower().replace(" ", "_").replace("🏠", "").replace("🔍", "").replace("📝", "").replace("📊", "").replace("🎯", "").replace("💬", "").replace("ℹ️", "").strip(): name
+            for name in self.pages.keys()
+        }
         
-        # Create a mapping of cleaned page names to original names
-        page_mapping = {name.lower().replace(" ", "_").replace("🏠", "").replace("🔍", "").replace("📝", "").replace("📊", "").replace("🎯", "").replace("💬", "").replace("ℹ️", "").strip(): name 
-                       for name in self.pages.keys()}
-        
-        # Render the appropriate page
         if current_page in page_mapping:
             self.pages[page_mapping[current_page]]()
         else:
-            # Default to home page if invalid page
             self.render_home()
     
 if __name__ == "__main__":

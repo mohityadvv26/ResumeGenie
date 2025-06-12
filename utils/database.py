@@ -1,3 +1,4 @@
+
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -27,8 +28,9 @@ class Analysis(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class DatabaseManager:
-    def __init__(self, db_path='resume_data.db'):
-        self.engine = create_engine(f'sqlite:///{db_path}')
+    def __init__(self, user, password, host, database):
+        # Update the connection string for MySQL
+        db_manager = DatabaseManager(user='root', password='Mohit@2004', host='localhost', database='resume_db')
         Base.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()

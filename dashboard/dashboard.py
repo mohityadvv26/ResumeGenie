@@ -4,10 +4,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from config.database import get_database_connection
-import io
-import uuid
 from plotly.subplots import make_subplots
 from io import BytesIO
+import traceback
+import pymysql
 
 class DashboardManager:
     def __init__(self):
@@ -159,64 +159,74 @@ class DashboardManager:
     def get_skill_distribution(self):
         """Get skill distribution data"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            WITH RECURSIVE split(skill, rest) AS (
-                SELECT '', skills || ','
-                FROM resume_data
-                UNION ALL
-                SELECT
-                    substr(rest, 0, instr(rest, ',')),
-                    substr(rest, instr(rest, ',') + 1)
-                FROM split
-                WHERE rest <> ''
-            ),
-            SkillCategories AS (
-                SELECT 
-                    CASE 
-                        WHEN LOWER(TRIM(skill, '[]" ')) LIKE '%python%' OR LOWER(TRIM(skill, '[]" ')) LIKE '%java%' OR 
-                             LOWER(TRIM(skill, '[]" ')) LIKE '%javascript%' OR LOWER(TRIM(skill, '[]" ')) LIKE '%c++%' OR 
-                             LOWER(TRIM(skill, '[]" ')) LIKE '%programming%' THEN 'Programming'
-                        WHEN LOWER(TRIM(skill, '[]" ')) LIKE '%sql%' OR LOWER(TRIM(skill, '[]" ')) LIKE '%database%' OR 
-                             LOWER(TRIM(skill, '[]" ')) LIKE '%mongodb%' THEN 'Database'
-                        WHEN LOWER(TRIM(skill, '[]" ')) LIKE '%aws%' OR LOWER(TRIM(skill, '[]" ')) LIKE '%cloud%' OR 
-                             LOWER(TRIM(skill, '[]" ')) LIKE '%azure%' THEN 'Cloud'
-                        WHEN LOWER(TRIM(skill, '[]" ')) LIKE '%agile%' OR LOWER(TRIM(skill, '[]" ')) LIKE '%scrum%' OR 
-                             LOWER(TRIM(skill, '[]" ')) LIKE '%management%' THEN 'Management'
-                        ELSE 'Other'
-                    END as category,
-                    COUNT(*) as count
-                FROM split
-                WHERE skill <> ''
-                GROUP BY category
-            )
-            SELECT category, count
-            FROM SkillCategories
-            ORDER BY count DESC
-        """)
-        
-        categories, counts = [], []
-        for row in cursor.fetchall():
-            categories.append(row[0])
-            counts.append(row[1])
+        try:
+            cursor.execute("""
+                WITH RECURSIVE split(skill, rest) AS (
+                    SELECT CAST('' AS CHAR(1000)), CONCAT(skills, ',')
+                    FROM resume_data
+                    UNION ALL
+                    SELECT
+                        CAST(SUBSTRING_INDEX(rest, ',', 1) AS CHAR(1000)),
+                        SUBSTRING(rest FROM CHAR_LENGTH(SUBSTRING_INDEX(rest, ',', 1)) + 2)
+                    FROM split
+                    WHERE rest <> ''
+                ),
+                SkillCategories AS (
+                    SELECT 
+                        CASE 
+                            WHEN LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%python%' OR LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%java%' OR 
+                                LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%javascript%' OR LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%c++%' OR 
+                                LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%programming%' THEN 'Programming'
+                            WHEN LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%sql%' OR LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%database%' OR 
+                                LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%mongodb%' THEN 'Database'
+                            WHEN LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%aws%' OR LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%cloud%' OR 
+                                LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%azure%' THEN 'Cloud'
+                            WHEN LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%agile%' OR LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%scrum%' OR 
+                                LOWER(TRIM(BOTH '[]"' FROM skill)) LIKE '%management%' THEN 'Management'
+                            ELSE 'Other'
+                        END as category,
+                        COUNT(*) as count
+                    FROM split
+                    WHERE skill <> ''
+                    GROUP BY category
+                )
+                SELECT category, count
+                FROM SkillCategories
+                ORDER BY count DESC
+            """)
             
-        return categories, counts
-
+            categories, counts = [], []
+            for row in cursor.fetchall():
+                categories.append(row['category'])
+                counts.append(row['count'])
+                
+            return categories, counts
+        except Exception as e:
+            print(f"Error in get_skill_distribution:")
+            traceback.print_exc()
+            return [], []
+    
     def get_weekly_trends(self):
-        """Get weekly submission trends"""
-        cursor = self.conn.cursor()
         now = datetime.now()
         dates = [(now - timedelta(days=x)).strftime('%Y-%m-%d') for x in range(6, -1, -1)]
-        
+
         submissions = []
+        cursor = self.conn.cursor()
+
         for date in dates:
             cursor.execute("""
-                SELECT COUNT(*) 
-                FROM resume_data 
-                WHERE DATE(created_at) = DATE(?)
+                SELECT COUNT(*) FROM resume_data
+                WHERE DATE(created_at) = DATE(%s)
             """, (date,))
-            submissions.append(cursor.fetchone()[0])
-            
-        return [d[-3:] for d in dates], submissions  # Return shortened date format (e.g., 'Mon', 'Tue')
+            result = cursor.fetchone()
+            if result is not None and isinstance(result, (list, tuple)):
+                submissions.append(result[0])
+            else:
+                submissions.append(0)
+
+        # Convert full dates to weekday abbreviations (e.g., 'Mon', 'Tue')
+        weekdays = [datetime.strptime(d, "%Y-%m-%d").strftime("%a") for d in dates]
+        return weekdays, submissions
 
     def get_job_category_stats(self):
         """Get statistics by job category"""
@@ -235,8 +245,8 @@ class DashboardManager:
         
         categories, success_rates = [], []
         for row in cursor.fetchall():
-            categories.append(row[0])
-            success_rates.append(row[2] or 0)
+            categories.append(row["category"])
+            success_rates.append(row["success_rate"] or 0)
             
         return categories, success_rates
 
@@ -298,24 +308,19 @@ class DashboardManager:
 
     def get_resume_data(self):
         """Get all resume data"""
-        cursor = self.conn.cursor()
+        cursor = self.conn.cursor(pymysql.cursors.DictCursor)  # ✅ use DictCursor
         try:
             cursor.execute('''
             SELECT 
-                r.id,
-                r.name,
                 r.email,
                 r.phone,
-                r.linkedin,
-                r.github,
-                r.portfolio,
                 r.target_role,
                 r.target_category,
                 r.created_at,
-                a.ats_score,
-                a.keyword_match_score,
-                a.format_score,
-                a.section_score
+                a.ats_score AS ATS_Score,
+                a.keyword_match_score AS Keyword_Match,
+                a.format_score AS Format_Score,
+                a.section_score AS Section_Score
             FROM resume_data r
             LEFT JOIN resume_analysis a ON r.id = a.resume_id
             ORDER BY r.created_at DESC
@@ -335,16 +340,23 @@ class DashboardManager:
         if resume_data:
             # Convert to DataFrame
             columns = [
-                'ID', 'Name', 'Email', 'Phone', 'LinkedIn', 'GitHub', 
-                'Portfolio', 'Target Role', 'Target Category', 'Submission Date',
+                'Email', 'Phone', 'Target Role', 'Target Category', 'Submission Date',
                 'ATS Score', 'Keyword Match', 'Format Score', 'Section Score'
             ]
-            df = pd.DataFrame(resume_data, columns=columns)
-            
+
+            df = pd.DataFrame(resume_data)
+            # Rename columns safely
+            df.rename(columns={
+                'ats_score': 'ATS Score',
+                'keyword_match_score': 'Keyword Match',
+                'format_score': 'Format Score',
+                'section_score': 'Section Score',
+            }, inplace=True)
+
             # Format scores as percentages
-            score_columns = ['ATS Score', 'Keyword Match', 'Format Score', 'Section Score']
+            score_columns = ['ATS_Score', 'Keyword_Match', 'Format_Score', 'Section_Score']
             for col in score_columns:
-                df[col] = df[col].apply(lambda x: f"{x*100:.1f}%" if pd.notnull(x) else "N/A")
+                df[col] = df[col].apply(lambda x: f"{x:.1f}" if pd.notnull(x) else "N/A")
             
             # Style the dataframe
             st.markdown("""
@@ -366,26 +378,26 @@ class DashboardManager:
                 with col1:
                     target_role = st.selectbox(
                         "Filter by Target Role",
-                        options=["All"] + list(df['Target Role'].unique()),
+                        options=["All"] + list(df['target_role'].unique()),
                         key="role_filter"
                     )
                 with col2:
                     target_category = st.selectbox(
                         "Filter by Category",
-                        options=["All"] + list(df['Target Category'].unique()),
+                        options=["All"] + list(df['target_category'].unique()),
                         key="category_filter"
                     )
                 
                 # Apply filters
                 filtered_df = df.copy()
                 if target_role != "All":
-                    filtered_df = filtered_df[filtered_df['Target Role'] == target_role]
+                    filtered_df = filtered_df[filtered_df['target_role'] == target_role]
                 if target_category != "All":
-                    filtered_df = filtered_df[filtered_df['Target Category'] == target_category]
+                    filtered_df = filtered_df[filtered_df['target_category'] == target_category]
                 
                 # Display filtered data
                 st.dataframe(
-                    filtered_df,
+                    filtered_df.drop(columns=['name'], errors='ignore'),
                     use_container_width=True,
                     hide_index=True
                 )
@@ -429,56 +441,11 @@ class DashboardManager:
         # Render resume data section
         self.render_resume_data_section()
         
-        # Render admin logs section
-        st.markdown("<h2 class='section-title'>Admin Activity Logs</h2>", unsafe_allow_html=True)
-        
-        # Get admin logs
-        admin_logs = self.get_admin_logs()
-        
-        if admin_logs:
-            # Convert to DataFrame
-            df = pd.DataFrame(admin_logs, columns=['Admin Email', 'Action', 'Timestamp'])
-            
-            # Style the dataframe
-            st.markdown("""
-            <style>
-            .admin-logs {
-                background-color: #2D2D2D;
-                border-radius: 10px;
-                padding: 1rem;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            with st.container():
-                st.markdown('<div class="admin-logs">', unsafe_allow_html=True)
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                # Add download button
-                excel_buffer = BytesIO()
-                df.to_excel(excel_buffer, index=False, engine='openpyxl')
-                excel_buffer.seek(0)
-                
-                st.download_button(
-                    label="📥 Download Admin Logs as Excel",
-                    data=excel_buffer,
-                    file_name=f"admin_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_admin_logs"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.info("No admin activity logs available")
-
     def export_to_excel(self):
         """Export data to Excel format"""
         query = """
             SELECT 
-                rd.name, rd.email, rd.phone, rd.linkedin, rd.github, rd.portfolio,
+                rd.email, rd.phone,
                 rd.summary, rd.target_role, rd.target_category,
                 rd.education, rd.experience, rd.projects, rd.skills,
                 ra.ats_score, ra.keyword_match_score, ra.format_score, ra.section_score,
@@ -533,7 +500,7 @@ class DashboardManager:
         """Export data to CSV format"""
         query = """
             SELECT 
-                rd.name, rd.email, rd.phone, rd.linkedin, rd.github, rd.portfolio,
+                rd.name, rd.email, rd.phone,
                 rd.summary, rd.target_role, rd.target_category,
                 rd.education, rd.experience, rd.projects, rd.skills,
                 ra.ats_score, ra.keyword_match_score, ra.format_score, ra.section_score,
@@ -606,7 +573,9 @@ class DashboardManager:
             FROM admin_logs
             ORDER BY timestamp DESC
             ''')
+            # return cursor.fetchall()
             return cursor.fetchall()
+            
         except Exception as e:
             print(f"Error fetching admin logs: {str(e)}")
             return []
@@ -736,420 +705,63 @@ class DashboardManager:
                 </div>
             """.format(datetime.now().strftime('%B %d, %Y %I:%M %p')), unsafe_allow_html=True)
 
-        # Quick Stats
-        stats = self.get_quick_stats()
-        trend_indicators = self.get_trend_indicators()
         
-        st.markdown("""
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <p class="stat-value">{}</p>
-                    <p class="stat-label">Total Resumes</p>
-                    <span class="trend-indicator {}">
-                        {} {}%
-                    </span>
-                </div>
-                <div class="stat-card">
-                    <p class="stat-value">{}</p>
-                    <p class="stat-label">Avg ATS Score</p>
-                    <span class="trend-indicator {}">
-                        {} {}%
-                    </span>
-                </div>
-                <div class="stat-card">
-                    <p class="stat-value">{}</p>
-                    <p class="stat-label">High Performing</p>
-                    <span class="trend-indicator {}">
-                        {} {}%
-                    </span>
-                </div>
-                <div class="stat-card">
-                    <p class="stat-value">{}</p>
-                    <p class="stat-label">Success Rate</p>
-                    <span class="trend-indicator {}">
-                        {} {}%
-                    </span>
-                </div>
-            </div>
-            </div>
-        """.format(
-            stats['Total Resumes'], 
-            trend_indicators['resumes']['class'], trend_indicators['resumes']['icon'], trend_indicators['resumes']['value'],
-            stats['Avg ATS Score'],
-            trend_indicators['ats']['class'], trend_indicators['ats']['icon'], trend_indicators['ats']['value'],
-            stats['High Performing'],
-            trend_indicators['high_performing']['class'], trend_indicators['high_performing']['icon'], trend_indicators['high_performing']['value'],
-            stats['Success Rate'],
-            trend_indicators['success_rate']['class'], trend_indicators['success_rate']['icon'], trend_indicators['success_rate']['value']
-        ), unsafe_allow_html=True)
-
-        # Performance Analytics Section
-        st.markdown('<div class="section-title">📈 Performance Analytics</div>', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = self.create_enhanced_ats_gauge(float(stats['Avg ATS Score'].rstrip('%')))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with col2:
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = self.create_skill_distribution_chart()
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # Additional Analytics
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = self.create_submission_trends_chart()
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with col2:
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = self.create_job_category_chart()
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
         # Key Insights Section
         st.markdown('<div class="section-title">🎯 Key Insights</div>', unsafe_allow_html=True)
-        insights = self.get_detailed_insights()
+        # insights = self.get_detailed_insights()
         
-        st.markdown('<div class="insights-grid">', unsafe_allow_html=True)
-        for insight in insights:
-            st.markdown(f"""
-                <div class="insight-card">
-                    <h3 style="color: #4FD1C5; margin-bottom: 1rem;">
-                        {insight['icon']} {insight['title']}
-                    </h3>
-                    <p style="color: rgba(255, 255, 255, 0.7); margin: 0;">
-                        {insight['description']}
-                    </p>
-                    <div style="margin-top: 1rem;">
-                        <span class="trend-indicator {insight['trend_class']}">
-                            {insight['trend_icon']} {insight['trend_value']}
-                        </span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
         # Admin logs section with Excel download functionality
         if st.session_state.get('is_admin', False):
             self.render_admin_section()
 
-    def get_trend_indicators(self):
-        """Get trend indicators for stats"""
-        cursor = self.conn.cursor()
-        indicators = {}
+    
+    # def get_detailed_insights(self):
+    #     """Get detailed insights from the database"""
+    #     cursor = self.conn.cursor()
+    #     insights = []
         
-        # Compare with last week's data
-        for metric in ['resumes', 'ats', 'high_performing', 'success_rate']:
-            try:
-                if metric == 'resumes':
-                    cursor.execute("""
-                        SELECT 
-                            (COUNT(*) - (
-                                SELECT COUNT(*) 
-                                FROM resume_data 
-                                WHERE created_at < date('now', '-7 days')
-                            )) * 100.0 / 
-                            NULLIF((
-                                SELECT COUNT(*) 
-                                FROM resume_data 
-                                WHERE created_at < date('now', '-7 days')
-                            ), 0)
-                        FROM resume_data
-                    """)
-                elif metric == 'ats':
-                    cursor.execute("""
-                        SELECT 
-                            (AVG(ats_score) - (
-                                SELECT AVG(ats_score) 
-                                FROM resume_analysis 
-                                WHERE created_at < date('now', '-7 days')
-                            )) * 100.0 / 
-                            NULLIF((
-                                SELECT AVG(ats_score) 
-                                FROM resume_analysis 
-                                WHERE created_at < date('now', '-7 days')
-                            ), 0)
-                        FROM resume_analysis
-                    """)
-                
-                change = cursor.fetchone()[0] or 0
-                indicators[metric] = {
-                    'value': abs(round(change, 1)),
-                    'icon': '↑' if change >= 0 else '↓',
-                    'class': 'trend-up' if change >= 0 else 'trend-down'
-                }
-            except Exception:
-                indicators[metric] = {
-                    'value': 0,
-                    'icon': '→',
-                    'class': 'trend-neutral'
-                }
         
-        return indicators
+    #     # Most Common Skills
+    #     cursor.execute("""
+    #         WITH RECURSIVE
+    #         split(skill, rest) AS (
+    #             SELECT '', CONCAT(skills, ',') 
+    #             FROM resume_data 
+    #             WHERE skills IS NOT NULL
+    #             UNION ALL
+    #             SELECT
+    #                 substr(rest, 0, instr(rest, ',')),
+    #                 substr(rest, instr(rest, ',') + 1)
+    #             FROM split 
+    #             WHERE rest <> ''
+    #         ),
+    #         cleaned_skills AS (
+    #             SELECT TRIM(REPLACE(REPLACE(skill, '[', ''), ']', '')) as skill
+    #             FROM split 
+    #             WHERE skill <> ''
+    #         )
+    #         SELECT skill, COUNT(*) as count
+    #         FROM cleaned_skills
+    #         GROUP BY skill
+    #         ORDER BY count DESC
+    #         LIMIT 3
+    #     """)
+    #     top_skills = cursor.fetchall()
+    #     if top_skills:
+    #         skills_text = f"Most in-demand skills: Python ({top_skills[0][1]} resumes), Java ({top_skills[1][1]} resumes), Express ({top_skills[2][1]} resumes)"
+    #         insights.append({
+    #             'title': 'Top Skills',
+    #             'icon': '💡',
+    #             'description': f"Most in-demand skills: {skills_text}",
+    #             'trend_class': 'trend-up',
+    #             'trend_icon': '🔝',
+    #             'trend_value': f"Top {len(top_skills)}"
+    #         })
+        
+    #     return insights
 
-    def get_detailed_insights(self):
-        """Get detailed insights from the database"""
-        cursor = self.conn.cursor()
-        insights = []
-        
-        # Most Successful Job Category
-        cursor.execute("""
-            SELECT target_category, AVG(ats_score) as avg_score,
-                   COUNT(*) as submission_count
-            FROM resume_data rd
-            JOIN resume_analysis ra ON rd.id = ra.resume_id
-            GROUP BY target_category
-            ORDER BY avg_score DESC
-            LIMIT 1
-        """)
-        top_category = cursor.fetchone()
-        if top_category:
-            insights.append({
-                'title': 'Top Performing Category',
-                'icon': '🏆',
-                'description': f"{top_category[0]} leads with {top_category[1]:.1f}% average ATS score across {top_category[2]} submissions",
-                'trend_class': 'trend-up',
-                'trend_icon': '↑',
-                'trend_value': f"{top_category[1]:.1f}%"
-            })
-        
-        # Recent Improvement
-        cursor.execute("""
-            SELECT 
-                (SELECT AVG(ats_score) FROM resume_analysis 
-                 WHERE created_at >= date('now', '-7 days')) as recent_score,
-                (SELECT AVG(ats_score) FROM resume_analysis 
-                 WHERE created_at < date('now', '-7 days')) as old_score
-        """)
-        scores = cursor.fetchone()
-        if scores and scores[0] and scores[1]:
-            change = scores[0] - scores[1]
-            insights.append({
-                'title': 'Weekly Trend',
-                'icon': '📈',
-                'description': f"ATS scores have {'improved' if change >= 0 else 'decreased'} by {abs(change):.1f}% in the last week",
-                'trend_class': 'trend-up' if change >= 0 else 'trend-down',
-                'trend_icon': '↑' if change >= 0 else '↓',
-                'trend_value': f"{abs(change):.1f}%"
-            })
-        
-        # Most Common Skills
-        cursor.execute("""
-            WITH RECURSIVE
-            split(skill, rest) AS (
-                SELECT '', skills || ',' 
-                FROM resume_data 
-                WHERE skills IS NOT NULL
-                UNION ALL
-                SELECT
-                    substr(rest, 0, instr(rest, ',')),
-                    substr(rest, instr(rest, ',') + 1)
-                FROM split 
-                WHERE rest <> ''
-            ),
-            cleaned_skills AS (
-                SELECT TRIM(REPLACE(REPLACE(skill, '[', ''), ']', '')) as skill
-                FROM split 
-                WHERE skill <> ''
-            )
-            SELECT skill, COUNT(*) as count
-            FROM cleaned_skills
-            GROUP BY skill
-            ORDER BY count DESC
-            LIMIT 3
-        """)
-        top_skills = cursor.fetchall()
-        if top_skills:
-            skills_text = f"Most in-demand skills: Python ({top_skills[0][1]} resumes), Java ({top_skills[1][1]} resumes), Express ({top_skills[2][1]} resumes)"
-            insights.append({
-                'title': 'Top Skills',
-                'icon': '💡',
-                'description': f"Most in-demand skills: {skills_text}",
-                'trend_class': 'trend-up',
-                'trend_icon': '🔝',
-                'trend_value': f"Top {len(top_skills)}"
-            })
-        
-        return insights
 
-    def get_quick_stats(self):
-        """Get quick statistics for the dashboard"""
-        cursor = self.conn.cursor()
-        
-        # Total Resumes
-        cursor.execute("SELECT COUNT(*) FROM resume_data")
-        total_resumes = cursor.fetchone()[0]
-        
-        # Average ATS Score
-        cursor.execute("SELECT AVG(ats_score) FROM resume_analysis")
-        avg_ats = cursor.fetchone()[0] or 0
-        
-        # High Performing Resumes
-        cursor.execute("SELECT COUNT(*) FROM resume_analysis WHERE ats_score >= 70")
-        high_performing = cursor.fetchone()[0]
-        
-        # Success Rate
-        success_rate = (high_performing / total_resumes * 100) if total_resumes > 0 else 0
-        
-        return {
-            "Total Resumes": f"{total_resumes:,}",
-            "Avg ATS Score": f"{avg_ats:.1f}%",
-            "High Performing": f"{high_performing:,}",
-            "Success Rate": f"{success_rate:.1f}%"
-        }
+   
 
-    def create_enhanced_ats_gauge(self, value):
-        """Create an enhanced ATS score gauge chart"""
-        reference = 70  # Target score
-        delta = value - reference
-        
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=value,
-            delta={
-                'reference': reference,
-                'valueformat': '.1f',
-                'increasing': {'color': '#2ecc71'},
-                'decreasing': {'color': '#e74c3c'}
-            },
-            number={'font': {'size': 40, 'color': 'white'}},
-            gauge={
-                'axis': {
-                    'range': [0, 100],
-                    'tickwidth': 1,
-                    'tickcolor': 'white',
-                    'tickfont': {'color': 'white'}
-                },
-                'bar': {'color': '#3498db'},
-                'bgcolor': 'rgba(0,0,0,0)',
-                'borderwidth': 2,
-                'bordercolor': 'white',
-                'steps': [
-                    {'range': [0, 40], 'color': '#e74c3c'},
-                    {'range': [40, 70], 'color': '#f1c40f'},
-                    {'range': [70, 100], 'color': '#2ecc71'}
-                ],
-                'threshold': {
-                    'line': {'color': 'white', 'width': 4},
-                    'thickness': 0.75,
-                    'value': reference
-                }
-            }
-        ))
-        
-        fig.update_layout(
-            title={
-                'text': 'ATS Score Performance',
-                'font': {'size': 24, 'color': 'white'},
-                'y': 0.85
-            },
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font={'color': 'white'},
-            height=350,
-            margin=dict(l=20, r=20, t=80, b=20)
-        )
-        
-        return fig
-
-    def create_skill_distribution_chart(self):
-        """Create a skill distribution chart"""
-        categories, counts = self.get_skill_distribution()
-        
-        fig = go.Figure(data=[
-            go.Bar(
-                x=categories,
-                y=counts,
-                marker_color=self.colors['info'],
-                text=counts,
-                textposition='auto',
-            )
-        ])
-        
-        fig.update_layout(
-            title={
-                'text': 'Skill Distribution',
-                'y':0.95,
-                'x':0.5,
-                'xanchor': 'center',
-                'yanchor': 'top'
-            },
-            height=350,  
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color=self.colors['text']),
-            margin=dict(l=40, r=40, t=60, b=40),
-            xaxis=dict(
-                showgrid=False,
-                showline=True,
-                linecolor='rgba(255,255,255,0.2)',
-                tickfont=dict(size=12)
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.1)',
-                zeroline=False
-            ),
-            bargap=0.3
-        )
-        return fig
-
-    def create_submission_trends_chart(self):
-        """Create a weekly submission trend chart"""
-        dates, submissions = self.get_weekly_trends()
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=dates,
-            y=submissions,
-            mode='lines+markers',
-            line=dict(color=self.colors['info'], width=3),
-            marker=dict(size=8, color=self.colors['info'])
-        ))
-        
-        fig.update_layout(
-            title="Weekly Submission Pattern",
-            paper_bgcolor=self.colors['card'],
-            plot_bgcolor=self.colors['card'],
-            font={'color': self.colors['text']},
-            height=300,
-            margin=dict(l=20, r=20, t=50, b=20)
-        )
-        fig.update_xaxes(title_text="Day of Week", color=self.colors['text'])
-        fig.update_yaxes(title_text="Number of Submissions", color=self.colors['text'])
-        
-        return fig
-
-    def create_job_category_chart(self):
-        """Create a success rate by category chart"""
-        categories, rates = self.get_job_category_stats()
-        fig = go.Figure(go.Bar(
-            x=categories,
-            y=rates,
-            marker_color=[self.colors['success'], self.colors['info'], 
-                        self.colors['warning'], self.colors['purple'], 
-                        self.colors['secondary']],
-            text=[f"{rate}%" for rate in rates],
-            textposition='auto',
-        ))
-        
-        fig.update_layout(
-            title="Success Rate by Job Category",
-            paper_bgcolor=self.colors['card'],
-            plot_bgcolor=self.colors['card'],
-            font={'color': self.colors['text']},
-            height=300,
-            margin=dict(l=20, r=20, t=50, b=20)
-        )
-        fig.update_xaxes(title_text="Job Category", color=self.colors['text'])
-        fig.update_yaxes(title_text="Success Rate (%)", color=self.colors['text'])
-        
-        return fig
+# vdvdfvdsdkjnawdckjsndlknmadfmv
+# '\dvadsfvmadsk;lsnaeklv

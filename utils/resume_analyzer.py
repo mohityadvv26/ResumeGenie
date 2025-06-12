@@ -1,7 +1,9 @@
 import re
+import spacy
 
 class ResumeAnalyzer:
     def __init__(self):
+        self.nlp = spacy.load("en_core_web_sm")
         # Document type indicators
         self.document_types = {
             'resume': [
@@ -146,291 +148,419 @@ class ResumeAnalyzer:
         except Exception as e:
             raise Exception(f"Error extracting text from DOCX file: {str(e)}")
 
+    # def extract_personal_info(self, text):
+    #     """Extract personal information from resume text"""
+    #     # Basic patterns for personal info
+    #     email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
+    #     phone_pattern = r'(\+\d{1,3}[-.]?)?\s*\(?\d{3}\)?[-.]?\s*\d{3}[-.]?\s*\d{4}'
+    #     linkedin_pattern = r'linkedin\.com/in/[\w-]+'
+    #     github_pattern = r'github\.com/[\w-]+'
+        
+    #     # Extract information
+    #     email = re.search(email_pattern, text)
+    #     phone = re.search(phone_pattern, text)
+    #     linkedin = re.search(linkedin_pattern, text)
+    #     github = re.search(github_pattern, text)
+        
+    #     # Get the first line as name (basic assumption)
+    #     name = text.split('\n')[0].strip()
+        
+    #     return {
+    #         'name': name if len(name) > 0 else 'Unknown',
+    #         'email': email.group(0) if email else '',
+    #         'phone': phone.group(0) if phone else '',
+    #         'linkedin': linkedin.group(0) if linkedin else '',
+    #         'github': github.group(0) if github else '',
+    #         'portfolio': ''  # Can be enhanced later
+    #     }
+
     def extract_personal_info(self, text):
-        """Extract personal information from resume text"""
-        # Basic patterns for personal info
-        email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
-        phone_pattern = r'(\+\d{1,3}[-.]?)?\s*\(?\d{3}\)?[-.]?\s*\d{3}[-.]?\s*\d{4}'
-        linkedin_pattern = r'linkedin\.com/in/[\w-]+'
-        github_pattern = r'github\.com/[\w-]+'
+        """Extract personal information from resume text using spaCy NER"""
+        doc = self.nlp(text)  # Process text with spaCy model
         
-        # Extract information
-        email = re.search(email_pattern, text)
-        phone = re.search(phone_pattern, text)
-        linkedin = re.search(linkedin_pattern, text)
-        github = re.search(github_pattern, text)
-        
-        # Get the first line as name (basic assumption)
-        name = text.split('\n')[0].strip()
-        
-        return {
-            'name': name if len(name) > 0 else 'Unknown',
-            'email': email.group(0) if email else '',
-            'phone': phone.group(0) if phone else '',
-            'linkedin': linkedin.group(0) if linkedin else '',
-            'github': github.group(0) if github else '',
-            'portfolio': ''  # Can be enhanced later
+        personal_info = {
+            'name': '',
+            'email': '',
+            'phone': '',
+            'linkedin': '',
+            'github': '',
+            'portfolio': ''
         }
+        
+        # Extract entities using spaCy NER
+        for ent in doc.ents:
+            if ent.label_ == "PERSON" and not personal_info['name']:
+                personal_info['name'] = ent.text
+            elif ent.label_ == "EMAIL":
+                personal_info['email'] = ent.text
+            elif ent.label_ == "PHONE":
+                personal_info['phone'] = ent.text
+            elif ent.label_ == "URL":
+                if "linkedin.com" in ent.text.lower():
+                    personal_info['linkedin'] = ent.text
+                elif "github.com" in ent.text.lower():
+                    personal_info['github'] = ent.text
+        
+        # Fallback to regex if spaCy doesn't find certain entities
+        if not personal_info['email']:
+            email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
+            if email_match:
+                personal_info['email'] = email_match.group(0)
+        
+        if not personal_info['phone']:
+            phone_match = re.search(r'(\+\d{1,3}[-.]?)?\s*\(?\d{3}\)?[-.]?\s*\d{3}[-.]?\s*\d{4}', text)
+            if phone_match:
+                personal_info['phone'] = phone_match.group(0)
+        
+        return personal_info
+    
+    # def extract_education(self, text):
+    #     """Extract education information from resume text"""
+    #     education = []
+    #     lines = text.split('\n')
+    #     education_keywords = [
+    #         'education', 'academic', 'qualification', 'degree', 'university', 'college',
+    #         'school', 'institute', 'certification', 'diploma', 'bachelor', 'master',
+    #         'phd', 'b.tech', 'm.tech', 'b.e', 'm.e', 'b.sc', 'm.sc','bca', 'mca', 'b.com',
+    #         'm.com', 'b.cs-it', 'imca', 'bba', 'mba', 'honors', 'scholarship'
+    #     ]
+    #     in_education_section = False
+    #     current_entry = []
+
+    #     for line in lines:
+    #         line = line.strip()
+    #         # Check for section header
+    #         if any(keyword.lower() in line.lower() for keyword in education_keywords):
+    #             if not any(keyword.lower() == line.lower() for keyword in education_keywords):
+    #                 # This line contains education info, not just a header
+    #                 current_entry.append(line)
+    #             in_education_section = True
+    #             continue
+            
+    #         if in_education_section:
+    #             # Check if we've hit another section
+    #             if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
+    #                 if not any(edu_key.lower() in line.lower() for edu_key in education_keywords):
+    #                     in_education_section = False
+    #                     if current_entry:
+    #                         education.append(' '.join(current_entry))
+    #                         current_entry = []
+    #                     continue
+                
+    #             if line:
+    #                 current_entry.append(line)
+    #             elif current_entry:  # Empty line and we have content
+    #                 education.append(' '.join(current_entry))
+    #                 current_entry = []
+        
+    #     if current_entry:
+    #         education.append(' '.join(current_entry))
+        
+    #     return education
 
     def extract_education(self, text):
-        """Extract education information from resume text"""
-        education = []
-        lines = text.split('\n')
-        education_keywords = [
-            'education', 'academic', 'qualification', 'degree', 'university', 'college',
-            'school', 'institute', 'certification', 'diploma', 'bachelor', 'master',
-            'phd', 'b.tech', 'm.tech', 'b.e', 'm.e', 'b.sc', 'm.sc','bca', 'mca', 'b.com',
-            'm.com', 'b.cs-it', 'imca', 'bba', 'mba', 'honors', 'scholarship'
-        ]
-        in_education_section = False
-        current_entry = []
-
-        for line in lines:
-            line = line.strip()
-            # Check for section header
-            if any(keyword.lower() in line.lower() for keyword in education_keywords):
-                if not any(keyword.lower() == line.lower() for keyword in education_keywords):
-                    # This line contains education info, not just a header
-                    current_entry.append(line)
-                in_education_section = True
-                continue
-            
-            if in_education_section:
-                # Check if we've hit another section
-                if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
-                    if not any(edu_key.lower() in line.lower() for edu_key in education_keywords):
-                        in_education_section = False
-                        if current_entry:
-                            education.append(' '.join(current_entry))
-                            current_entry = []
-                        continue
-                
-                if line:
-                    current_entry.append(line)
-                elif current_entry:  # Empty line and we have content
-                    education.append(' '.join(current_entry))
-                    current_entry = []
+        """Extract education information using spaCy NER and dependency parsing"""
+        doc = self.nlp(text)  # Process text with spaCy model
         
-        if current_entry:
-            education.append(' '.join(current_entry))
+        education = []
+        current_entry = []
+        
+        for sent in doc.sents:
+            # Check for education-related keywords in the sentence
+            if any(token.text.lower() in ['education', 'degree', 'university', 'college'] for token in sent):
+                # Extract entities like ORG (institutions) and DATE (graduation dates)
+                entities = [ent.text for ent in sent.ents if ent.label_ in ["ORG", "DATE"]]
+                if entities:
+                    education.append(' '.join(entities))
         
         return education
 
-    def extract_experience(self, text):
-        """Extract work experience information from resume text"""
-        experience = []
-        lines = text.split('\n')
-        experience_keywords = [
-            'experience', 'employment', 'work history', 'professional experience',
-            'work experience', 'career history', 'professional background',
-            'employment history', 'job history', 'positions held', 'experience',
-            'job title', 'job responsibilities', 'job description', 'job summary'
-        ]
-        in_experience_section = False
-        current_entry = []
+    # def extract_experience(self, text):
+    #     """Extract work experience information from resume text"""
+    #     experience = []
+    #     lines = text.split('\n')
+    #     experience_keywords = [
+    #         'experience', 'employment', 'work history', 'professional experience',
+    #         'work experience', 'career history', 'professional background',
+    #         'employment history', 'job history', 'positions held', 'experience',
+    #         'job title', 'job responsibilities', 'job description', 'job summary'
+    #     ]
+    #     in_experience_section = False
+    #     current_entry = []
 
-        for line in lines:
-            line = line.strip()
-            # Check for section header
-            if any(keyword.lower() in line.lower() for keyword in experience_keywords):
-                if not any(keyword.lower() == line.lower() for keyword in experience_keywords):
-                    # This line contains experience info, not just a header
-                    current_entry.append(line)
-                in_experience_section = True
-                continue
+    #     for line in lines:
+    #         line = line.strip()
+    #         # Check for section header
+    #         if any(keyword.lower() in line.lower() for keyword in experience_keywords):
+    #             if not any(keyword.lower() == line.lower() for keyword in experience_keywords):
+    #                 # This line contains experience info, not just a header
+    #                 current_entry.append(line)
+    #             in_experience_section = True
+    #             continue
             
-            if in_experience_section:
-                # Check if we've hit another section
-                if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
-                    if not any(exp_key.lower() in line.lower() for exp_key in experience_keywords):
-                        in_experience_section = False
-                        if current_entry:
-                            experience.append(' '.join(current_entry))
-                            current_entry = []
-                        continue
+    #         if in_experience_section:
+    #             # Check if we've hit another section
+    #             if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
+    #                 if not any(exp_key.lower() in line.lower() for exp_key in experience_keywords):
+    #                     in_experience_section = False
+    #                     if current_entry:
+    #                         experience.append(' '.join(current_entry))
+    #                         current_entry = []
+    #                     continue
                 
-                if line:
-                    current_entry.append(line)
-                elif current_entry:  # Empty line and we have content
-                    experience.append(' '.join(current_entry))
-                    current_entry = []
+    #             if line:
+    #                 current_entry.append(line)
+    #             elif current_entry:  # Empty line and we have content
+    #                 experience.append(' '.join(current_entry))
+    #                 current_entry = []
         
-        if current_entry:
-            experience.append(' '.join(current_entry))
+    #     if current_entry:
+    #         experience.append(' '.join(current_entry))
+        
+    #     return experience
+
+    def extract_experience(self, text):
+        """Extract work experience using spaCy NER and dependency parsing"""
+        doc = self.nlp(text)  # Process text with spaCy model
+        
+        experience = []
+        current_entry = []
+        
+        for sent in doc.sents:
+            # Check for experience-related keywords in the sentence
+            if any(token.text.lower() in ['experience', 'work', 'job', 'employment'] for token in sent):
+                # Extract entities like ORG (companies) and DATE (employment dates)
+                entities = [ent.text for ent in sent.ents if ent.label_ in ["ORG", "DATE"]]
+                if entities:
+                    experience.append(' '.join(entities))
         
         return experience
 
-    def extract_projects(self, text):
-        """Extract project information from resume text"""
-        projects = []
-        lines = text.split('\n')
-        project_keywords = [
-            'projects', 'personal projects', 'academic projects', 'key projects',
-            'major projects', 'professional projects', 'project experience',
-            'relevant projects', 'featured projects','latest projects',
-            'top projects'
-        ]
-        in_project_section = False
-        current_entry = []
+    # def extract_projects(self, text):
+    #     """Extract project information from resume text"""
+    #     projects = []
+    #     lines = text.split('\n')
+    #     project_keywords = [
+    #         'projects', 'personal projects', 'academic projects', 'key projects',
+    #         'major projects', 'professional projects', 'project experience',
+    #         'relevant projects', 'featured projects','latest projects',
+    #         'top projects'
+    #     ]
+    #     in_project_section = False
+    #     current_entry = []
 
-        for line in lines:
-            line = line.strip()
-            # Check for section header
-            if any(keyword.lower() in line.lower() for keyword in project_keywords):
-                if not any(keyword.lower() == line.lower() for keyword in project_keywords):
-                    # This line contains project info, not just a header
-                    current_entry.append(line)
-                in_project_section = True
-                continue
+    #     for line in lines:
+    #         line = line.strip()
+    #         # Check for section header
+    #         if any(keyword.lower() in line.lower() for keyword in project_keywords):
+    #             if not any(keyword.lower() == line.lower() for keyword in project_keywords):
+    #                 # This line contains project info, not just a header
+    #                 current_entry.append(line)
+    #             in_project_section = True
+    #             continue
             
-            if in_project_section:
-                # Check if we've hit another section
-                if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
-                    if not any(proj_key.lower() in line.lower() for proj_key in project_keywords):
-                        in_project_section = False
-                        if current_entry:
-                            projects.append(' '.join(current_entry))
-                            current_entry = []
-                        continue
+    #         if in_project_section:
+    #             # Check if we've hit another section
+    #             if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
+    #                 if not any(proj_key.lower() in line.lower() for proj_key in project_keywords):
+    #                     in_project_section = False
+    #                     if current_entry:
+    #                         projects.append(' '.join(current_entry))
+    #                         current_entry = []
+    #                     continue
                 
-                if line:
-                    current_entry.append(line)
-                elif current_entry:  # Empty line and we have content
-                    projects.append(' '.join(current_entry))
-                    current_entry = []
+    #             if line:
+    #                 current_entry.append(line)
+    #             elif current_entry:  # Empty line and we have content
+    #                 projects.append(' '.join(current_entry))
+    #                 current_entry = []
         
-        if current_entry:
-            projects.append(' '.join(current_entry))
+    #     if current_entry:
+    #         projects.append(' '.join(current_entry))
+        
+    #     return projects
+
+    def extract_projects(self, text):
+        """Extract project information using spaCy NER and dependency parsing"""
+        doc = self.nlp(text)  # Process text with spaCy model
+        
+        projects = []
+        current_entry = []
+        
+        for sent in doc.sents:
+            # Check for project-related keywords in the sentence
+            if any(token.text.lower() in ['project', 'academic', 'professional'] for token in sent):
+                # Extract entities like ORG (organizations) and DATE (project dates)
+                entities = [ent.text for ent in sent.ents if ent.label_ in ["ORG", "DATE"]]
+                if entities:
+                    projects.append(' '.join(entities))
         
         return projects
 
-    def extract_skills(self, text):
-        """Extract skills from resume text"""
-        skills = set()  # Use set to avoid duplicates
-        lines = text.split('\n')
-        skills_keywords = [
-            'skills', 'technical skills', 'competencies', 'expertise',
-            'core competencies', 'professional skills', 'key skills',
-            'technical expertise', 'proficiencies', 'qualifications',
-            'top skills', 'key skill', 'major skill', 'personal skill',
-            'soft skills', 'soft skill', 'soft skillset'
-        ]
-        in_skills_section = False
-        current_entry = []
+    # def extract_skills(self, text):
+    #     """Extract skills from resume text"""
+    #     skills = set()  # Use set to avoid duplicates
+    #     lines = text.split('\n')
+    #     skills_keywords = [
+    #         'skills', 'technical skills', 'competencies', 'expertise',
+    #         'core competencies', 'professional skills', 'key skills',
+    #         'technical expertise', 'proficiencies', 'qualifications',
+    #         'top skills', 'key skill', 'major skill', 'personal skill',
+    #         'soft skills', 'soft skill', 'soft skillset'
+    #     ]
+    #     in_skills_section = False
+    #     current_entry = []
 
-        # Common skill separators
-        separators = [',', '•', '|', '/', '\\', '·', '>', '-', '–', '―']
+    #     # Common skill separators
+    #     separators = [',', '•', '|', '/', '\\', '·', '>', '-', '–', '―']
 
-        for line in lines:
-            line = line.strip()
-            # Check for section header
-            if any(keyword.lower() in line.lower() for keyword in skills_keywords):
-                if not any(keyword.lower() == line.lower() for keyword in skills_keywords):
-                    # This line contains skills, not just a header
-                    current_entry.append(line)
-                in_skills_section = True
-                continue
+    #     for line in lines:
+    #         line = line.strip()
+    #         # Check for section header
+    #         if any(keyword.lower() in line.lower() for keyword in skills_keywords):
+    #             if not any(keyword.lower() == line.lower() for keyword in skills_keywords):
+    #                 # This line contains skills, not just a header
+    #                 current_entry.append(line)
+    #             in_skills_section = True
+    #             continue
             
-            if in_skills_section:
-                # Check if we've hit another section
-                if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
-                    if not any(skill_key.lower() in line.lower() for skill_key in skills_keywords):
-                        in_skills_section = False
-                        if current_entry:
-                            # Process the current entry
-                            text_to_process = ' '.join(current_entry)
-                            # Split by common separators
-                            for separator in separators:
-                                if separator in text_to_process:
-                                    skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
-                            current_entry = []
-                        continue
+    #         if in_skills_section:
+    #             # Check if we've hit another section
+    #             if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
+    #                 if not any(skill_key.lower() in line.lower() for skill_key in skills_keywords):
+    #                     in_skills_section = False
+    #                     if current_entry:
+    #                         # Process the current entry
+    #                         text_to_process = ' '.join(current_entry)
+    #                         # Split by common separators
+    #                         for separator in separators:
+    #                             if separator in text_to_process:
+    #                                 skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
+    #                         current_entry = []
+    #                     continue
                 
-                if line:
-                    current_entry.append(line)
-                elif current_entry:  # Empty line and we have content
-                    # Process the current entry
-                    text_to_process = ' '.join(current_entry)
-                    # Split by common separators
-                    for separator in separators:
-                        if separator in text_to_process:
-                            skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
-                    current_entry = []
+    #             if line:
+    #                 current_entry.append(line)
+    #             elif current_entry:  # Empty line and we have content
+    #                 # Process the current entry
+    #                 text_to_process = ' '.join(current_entry)
+    #                 # Split by common separators
+    #                 for separator in separators:
+    #                     if separator in text_to_process:
+    #                         skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
+    #                 current_entry = []
         
-        if current_entry:
-            # Process any remaining skills
-            text_to_process = ' '.join(current_entry)
-            for separator in separators:
-                if separator in text_to_process:
-                    skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
+    #     if current_entry:
+    #         # Process any remaining skills
+    #         text_to_process = ' '.join(current_entry)
+    #         for separator in separators:
+    #             if separator in text_to_process:
+    #                 skills.update(skill.strip() for skill in text_to_process.split(separator) if skill.strip())
+        
+    #     return list(skills)
+
+    def extract_skills(self, text):
+        """Extract skills from resume text using NLP"""
+        doc = self.nlp(text)
+        
+        # Common technical skills keywords
+        tech_skills = {
+            "python", "java", "javascript", "react", "node.js", "sql",
+            "html", "css", "aws", "docker", "kubernetes", "git",
+            "machine learning", "ai", "data science", "analytics"
+        }
+        
+        skills = set()
+        for token in doc:
+            if token.text.lower() in tech_skills:
+                skills.add(token.text)
+            # Check for compound skills (e.g., "machine learning")
+            if token.i < len(doc) - 1:
+                bigram = (token.text + " " + doc[token.i + 1].text).lower()
+                if bigram in tech_skills:
+                    skills.add(bigram)
         
         return list(skills)
+    
+    # def extract_summary(self, text):
+    #     """Extract summary/objective from resume text"""
+    #     summary = []
+    #     lines = text.split('\n')
+    #     summary_keywords = [
+    #         'summary', 'professional summary', 'career summary', 'objective',
+    #         'career objective', 'professional objective', 'about me', 'profile',
+    #         'professional profile', 'career profile', 'overview', 'skill summary'
+    #     ]
+    #     in_summary_section = False
+    #     current_entry = []
+
+    #     # Try to find summary at the beginning of the resume
+    #     start_index = 0
+    #     while start_index < min(10, len(lines)) and not lines[start_index].strip():
+    #         start_index += 1
+
+    #     # Check first few non-empty lines for potential summary
+    #     first_lines = []
+    #     lines_checked = 0
+    #     for line in lines[start_index:]:
+    #         if line.strip():
+    #             first_lines.append(line.strip())
+    #             lines_checked += 1
+    #             if lines_checked >= 5:  # Check first 5 non-empty lines
+    #                 break
+
+    #     # If first few lines look like a summary (no special formatting, no contact info)
+    #     if first_lines and not any(keyword in first_lines[0].lower() for keyword in summary_keywords):
+    #         potential_summary = ' '.join(first_lines)
+    #         if len(potential_summary.split()) > 10:  # More than 10 words
+    #             if not re.search(r'\b(?:email|phone|address|tel|mobile|linkedin)\b', potential_summary.lower()):
+    #                 summary.append(potential_summary)
+
+    #     # Look for explicitly marked summary section
+    #     for line in lines:
+    #         line = line.strip()
+    #         # Check for section header
+    #         if any(keyword.lower() in line.lower() for keyword in summary_keywords):
+    #             if not any(keyword.lower() == line.lower() for keyword in summary_keywords):
+    #                 # This line contains summary info, not just a header
+    #                 current_entry.append(line)
+    #             in_summary_section = True
+    #             continue
+            
+    #         if in_summary_section:
+    #             # Check if we've hit another section
+    #             if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
+    #                 if not any(sum_key.lower() in line.lower() for sum_key in summary_keywords):
+    #                     in_summary_section = False
+    #                     if current_entry:
+    #                         summary.append(' '.join(current_entry))
+    #                         current_entry = []
+    #                     continue
+                
+    #             if line:
+    #                 current_entry.append(line)
+    #             elif current_entry:  # Empty line and we have content
+    #                 summary.append(' '.join(current_entry))
+    #                 current_entry = []
+        
+    #     if current_entry:
+    #         summary.append(' '.join(current_entry))
+        
+    #     return ' '.join(summary) if summary else ''
 
     def extract_summary(self, text):
-        """Extract summary/objective from resume text"""
-        summary = []
-        lines = text.split('\n')
-        summary_keywords = [
-            'summary', 'professional summary', 'career summary', 'objective',
-            'career objective', 'professional objective', 'about me', 'profile',
-            'professional profile', 'career profile', 'overview', 'skill summary'
-        ]
-        in_summary_section = False
-        current_entry = []
-
-        # Try to find summary at the beginning of the resume
-        start_index = 0
-        while start_index < min(10, len(lines)) and not lines[start_index].strip():
-            start_index += 1
-
-        # Check first few non-empty lines for potential summary
-        first_lines = []
-        lines_checked = 0
-        for line in lines[start_index:]:
-            if line.strip():
-                first_lines.append(line.strip())
-                lines_checked += 1
-                if lines_checked >= 5:  # Check first 5 non-empty lines
-                    break
-
-        # If first few lines look like a summary (no special formatting, no contact info)
-        if first_lines and not any(keyword in first_lines[0].lower() for keyword in summary_keywords):
-            potential_summary = ' '.join(first_lines)
-            if len(potential_summary.split()) > 10:  # More than 10 words
-                if not re.search(r'\b(?:email|phone|address|tel|mobile|linkedin)\b', potential_summary.lower()):
-                    summary.append(potential_summary)
-
-        # Look for explicitly marked summary section
-        for line in lines:
-            line = line.strip()
-            # Check for section header
-            if any(keyword.lower() in line.lower() for keyword in summary_keywords):
-                if not any(keyword.lower() == line.lower() for keyword in summary_keywords):
-                    # This line contains summary info, not just a header
-                    current_entry.append(line)
-                in_summary_section = True
-                continue
-            
-            if in_summary_section:
-                # Check if we've hit another section
-                if line and any(keyword.lower() in line.lower() for keyword in self.document_types['resume']):
-                    if not any(sum_key.lower() in line.lower() for sum_key in summary_keywords):
-                        in_summary_section = False
-                        if current_entry:
-                            summary.append(' '.join(current_entry))
-                            current_entry = []
-                        continue
-                
-                if line:
-                    current_entry.append(line)
-                elif current_entry:  # Empty line and we have content
-                    summary.append(' '.join(current_entry))
-                    current_entry = []
+        """Extract summary/objective using spaCy sentence scoring"""
+        doc = self.nlp(text)  # Process text with spaCy model
         
-        if current_entry:
-            summary.append(' '.join(current_entry))
+        # Score sentences based on their importance (e.g., length, keywords)
+        sentences = [sent.text for sent in doc.sents]
+        scored_sentences = [(sent, len(sent.split())) for sent in sentences]
         
-        return ' '.join(summary) if summary else ''
+        # Sort sentences by score and select the top 3
+        scored_sentences.sort(key=lambda x: x[1], reverse=True)
+        summary = ' '.join([sent[0] for sent in scored_sentences[:3]])
+        
+        return summary
 
     def analyze_resume(self, resume_data, job_requirements):
         """Analyze resume and return scores and recommendations"""

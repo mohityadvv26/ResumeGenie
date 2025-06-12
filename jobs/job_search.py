@@ -213,7 +213,7 @@ def render_market_insights():
 
     st.markdown("### 📊 Job Market Insights")
     
-    tabs = st.tabs(["Trending Skills", "Top Locations", "Salary Insights"])
+    tabs = st.tabs(["Trending Skills", "Top Locations", "Salary Insights","LinkedIn Jobs"])
     
     with tabs[0]:
         st.markdown('<div class="insights-grid">', unsafe_allow_html=True)
